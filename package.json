@@ -1,0 +1,18 @@
+{
+  "name": "paperpiano",
+  "version": "1.0.0",
+  "description": "",
+  "main": "./app/app.js",
+  "scripts": {
+    "start": "electron ./app/app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "xeecos",
+  "license": "MIT",
+  "dependencies": {
+    "serialport": "^4.0.7"
+  },
+  "devDependencies": {
+    "electron-rebuild": "^1.5.7"
+  }
+}

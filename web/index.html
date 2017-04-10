@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="description" content="Play MIDI files from your browser with MidiPlayerJS" />
+    <meta name="keywords" content="MIDI, music, player, javascript" />
+    <meta name="author" content="Garrett Grimm">
+    <title>MidiPlayerJS - JavaScript Midi Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script>
+        if (typeof module === 'object') {
+            window.module = module;
+            module = undefined;
+        }
+    </script>
+    <script src="js/jquery.js"></script>
+    <script>
+        if (window.module) module = window.module;
+    </script>
+    <script>
+        if (typeof module === 'object') {
+            window.module = module;
+            module = undefined;
+        }
+    </script>
+    <style type="text/css">
+        h1,
+        h2,
+        h3,
+        h4 {
+            font-family: 'Bree Serif', serif;
+        }
+        
+        #select-file {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container" style="padding-top:12px;">
+    </div>
+    <script>
+        // Load a MIDI file
+
+        var notes = {
+            q: 72,
+            w: 74,
+            e: 76,
+            r: 77,
+            t: 79,
+            y: 81,
+            u: 83,
+            a: 60,
+            s: 62,
+            d: 64,
+            f: 65,
+            g: 67,
+            h: 69,
+            j: 71,
+            z: 48,
+            x: 50,
+            c: 52,
+            v: 53,
+            b: 55,
+            n: 57,
+            m: 59
+        }
+        const {
+            ipcRenderer
+        } = require('electron');
+        $(document).on('keydown', function(evt) {
+            console.log(evt.keyCode)
+            if (evt.keyCode >= 48 && evt.keyCode <= 57) {
+                ipcRenderer.send("ready", {
+                    file: String.fromCharCode(evt.keyCode)
+                });
+            } else if (evt.keyCode == 187) {
+                ipcRenderer.send("ready", {
+                    file: 10
+                });
+            } else if (evt.keyCode == 189) {
+                ipcRenderer.send("ready", {
+                    file: 11
+                });
+            } else if (evt.keyCode == 192) {
+                ipcRenderer.send("ready", {
+                    file: 12
+                });
+            } else if (evt.keyCode == 32) {
+                ipcRenderer.send("stop");
+            } else {
+                if (notes[String.fromCharCode(evt.keyCode).toLowerCase()]) {
+                    ipcRenderer.send("music", {
+                        note: notes[String.fromCharCode(evt.keyCode).toLowerCase()]
+                    });
+                }
+            }
+
+            // console.log(String.fromCharCode(evt.keyCode), evt.keyCode);
+        });
+        // ipcRenderer.send("ready", {
+        //     file: 0
+        // });
+    </script>
+</body>
+
+</html>
