@@ -10,6 +10,8 @@
   "author": "xeecos",
   "license": "MIT",
   "dependencies": {
+    "electron": "^1.6.6",
+    "promise": "^7.1.1",
     "serialport": "^4.0.7"
   },
   "devDependencies": {

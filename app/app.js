@@ -17,10 +17,26 @@ var serial;
 var midiBuffer = [];
 var index = 0;
 SerialPort.list(function(err, ports) {
-    console.log(ports);
+    for (var i in ports) {
+        if (ports[i].comName.indexOf("CH341") > -1) {
+            serial = new SerialPort(ports[i].comName, {
+                baudRate: 115200
+            }, function() {
+                serial.on('data', function(data) {
+                    // console.log(data.toString());
+                });
+                //SKYCITY3 LIONKING tpfo4 m0457_01 m0457_05 m0457_03 m0346_01 12289115690 12289115691 12289115692 12394614940 senbon levan
+
+            });
+            break;
+        }
+    }
 });
 // Initialize player and register event handler 
 var prevTick = 0;
+var totalNotes = 0;
+var timeFile = "";
+var noteFile = "";
 var Player = new MidiPlayer.Player(function(event) {
     // console.log(event);
     // var midiMessage = MIDIMessage(event);
@@ -33,13 +49,21 @@ var Player = new MidiPlayer.Player(function(event) {
 
         var delta = event.delta;
         // if (track > 5) {
-        serial.write(new Buffer([track, note, Math.max(1, 0xff & (velocity / 5)), 0xff]));
-        // console.log(track);
+        serial.write(new Buffer([track % 4, note, Math.max(1, 0xff & (velocity / 5)), 0xff]));
+        totalNotes++;
+        console.log(totalNotes + " - " + (tick - prevTick) + " - " + track + ":" + note);
         // }
+        timeFile += (tick - prevTick) + ",";
+        noteFile += (((track % 4) << 6) + (note - 30)) + ",";
+
         prevTick = tick;
         // Player.stop();
         //document.querySelector('#track-' + event.track + ' code').innerHTML = JSON.stringify(event);
         //console.log(event);
+    } else {
+        if (event.string) {
+            console.log(event.track + ":" + event.string);
+        }
     }
 });
 const id = powerSaveBlocker.start('prevent-app-suspension')
@@ -66,18 +90,9 @@ function createWindow() {
         mainWindow = null
     })
 
-    serial = new SerialPort("/dev/tty.Makeblock-ELETSPP", {
-        baudRate: 115200
-    }, function() {
-        serial.on('data', function(data) {
-            // console.log(data.toString());
-        });
-        //SKYCITY3 LIONKING tpfo4 m0457_01 m0457_05 m0457_03 m0346_01 12289115690 12289115691 12289115692 12394614940 senbon levan
-
-    });
 }
 
-var list = ["SKYCITY3", "LIONKING", "tpfo4", "m0457_01", "m0457_05", "m0457_03", "m0346_01", "12289115690", "12289115691", "12289115692", "12394614940", "senbon", "levan"];
+var list = ["SKYCITY3", "Gravity_Falls_Theme", "tpfo4", "m0457_01", "m0457_05", "m0457_03", "m0346_01", "12289115690", "12289115691", "12289115692", "12394614940", "senbon", "levan"];
 app.on('ready', createWindow)
 
 // Quit when all windows are closed.
@@ -94,19 +109,28 @@ app.on('activate', function() {
 ipcMain.on('ready', (event, arg) => {
     //监听来自ipcRender的ready消息
     Player.stop();
-    Player.loadFile(__dirname + '/../web/' + list[arg.file * 1] + '.mid');
+    Player.loadFile(__dirname + '/../web/midi/' + list[arg.file * 1] + '.mid');
     Player.play();
+    timeFile = "";
+    noteFile = "";
 });
 var index = 0;
 ipcMain.on('stop', (event, arg) => {
     Player.stop();
+    if (timeFile.length > 900) {
+        fs.writeFileSync("./time.txt", timeFile);
+        fs.writeFileSync("./notes.txt", noteFile);
+        timeFile = "";
+        noteFile = "";
+        totalNotes = 0;
+    }
 });
 ipcMain.on('music', (event, arg) => {
     //监听来自ipcRender的ready消息
     if (index > 100) {
         index = 0;
     }
-    serial.write(new Buffer([(index++) % 4, arg.note, 8, 0xff]));
+    serial.write(new Buffer([(index++) % 4, arg.note, 10, 0xff]));
 });
 process.on('uncaughtException', function(err) {
     console.log(err);
