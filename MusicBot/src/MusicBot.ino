@@ -1,15 +1,16 @@
-
-#include "MeLEDMatrix.h"
-#include "MeUltrasonic.h"
+#include <SoftwareSerial.h>
 #include "MeLightArray.h"
 #include "synth.h"
 #include "song.h"
 #include <EEPROM.h>
 #include <avr/pgmspace.h>
-
-MeLEDMatrix ledMx1(12,13);
-MeLEDMatrix ledMx2(8,2);
-
+#include "MeLEDMatrix.h"
+MeLEDMatrix ledMx1(A0,A1);
+// MeLEDMatrix ledMx2(A2,A3);
+SoftwareSerial sw(9,10);
+bool isUSBReady = true;
+bool isConnected = false;
+bool isDataReady = false;
 uint8_t faceA[16] = {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0x0,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff};
 uint8_t faceB[16] = {0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0x0,0xff,0xff,0xff,0xff,0xff,0xff,0xff};
 
@@ -81,7 +82,6 @@ boolean potLockFlag1 = 0; //set if we just locked pot1, so we can monitor when i
 unsigned long instrumentTimer; //used to tell us when to pause the music if we're programming waveforms.
 byte MIDIstate = 0; //0 is MIDI off, 1 is baud rate 115200, and 2 is baud rate 31250
 
-//Adafruit Button Checker http://www.adafruit.com/blog/2009/10/20/example-code-for-multi-button-checker-with-debouncing/
 #define DEBOUNCE 10  // button debouncer, how many ms to debounce, 5+ ms is usually plenty
 byte buttons[] = {// here is where we define the buttons that we'll use. button "0" is the first, button "5" is the 6th, etc
   5, 7, 11, 8, 10}; // button pins
@@ -92,8 +92,6 @@ byte pressed[NUMBUTTONS], justpressed[NUMBUTTONS], justreleased[NUMBUTTONS], lon
 int lo[8] = {0,48,50,52,53,55,57,59};
 int mo[8] ={0,60,62,64,65,67,69,71};
 int ho[8] = {0,72,74,76,77,79,81,83};
-// int notes[14] = {71,6,6,6,6,6,6,6,6,6,6,6,6,6};
-// float delays[14] = {1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 
 int buffer[5] = {0,0,0,0,0};
 int index = 0;
@@ -109,10 +107,19 @@ int musicLength[2] = {981,2699};
 int musicIndex = 0;
 int songIndex = 0;
 long musicTime = 0;
+int loKey[7] = {0x1d,0x1b,0x6,0x19,0x5,0x11,0x10};
+int moKey[7] = {0x4,0x16,0x7,0x9,0xa,0xb,0xd};
+int hoKey[7] = {0x14,0x1a,0x8,0x15,0x17,0x1c,0x18};
+int numKey = 0x1e;
+int funcKey = 0x3A;
+int upKey = 0x52;
+int downKey = 0x51;
+int leftKey = 0x50;
+int rightKey = 0x4f;
+float speed = 3;
+int instrumentId = 6;
 void setPianoNote(int track, int n,float t){
-    // trackIndex++;
-      edgar.setupVoice(track%4, (analogRead(A7)/75)%14, n, 0, fminf(110,fmaxf(40,analogRead(A6)*t/80+40)), 64);//  
-    // edgar.setTime(track,fminf(16,fmaxf(1,analogRead(A6)/300*t)));
+      edgar.setupVoice(track%4, instrumentId, n, 0, fminf(110,fmaxf(40,900*t/80+40)), 64);
       edgar.trigger(track%4);
 }
 
@@ -129,22 +136,15 @@ void parseNote(int track,int note,int during){
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(115200);
-  pinMode(A7,INPUT);
-  pinMode(A6,INPUT);
+  sw.begin(9600);
   
-  ledMx1.setBrightness(1);
+  ledMx1.setBrightness(5);
   ledMx1.setColorIndex(1);
-  ledMx2.setBrightness(1);
-  ledMx2.setColorIndex(1);
+  
   DIDR0 = 0x3F;   //disable the digital input buffers on the analog pins to save a bit of power and reduce noise.
-  edgar.begin(CHB); 
+  edgar.begin(CHA); 
 
-  // currentNotes[0] = (unsigned int)musicNotes;
-  // currentTicks[0] = (unsigned int)musicTicks;
 }
-
-
 int reverse(int t){
   int o = 0;
   for(int i=0;i<8;i++){
@@ -153,56 +153,67 @@ int reverse(int t){
   return o;
 }
 void loop() {
-  if(Serial.available()){
-    uint8_t c = Serial.read();
-    buffer[bufferIndex] = c;
-    bufferIndex++;
-    if(c==0xff){
-      // Serial.print(buffer[0]);
-      // Serial.print(":");
-      // Serial.print(buffer[1]);
-      // Serial.print(":");
-      // Serial.print(buffer[2]);
-      // Serial.print(":");
-      // Serial.println(millis()-musicTime);
-      // musicTime = millis();
-      parseNote(buffer[0],buffer[1],buffer[2]);
-      bufferIndex = 0;
-      isAutoPlay = false;
-      lastAutoPlay = millis();
-    }
+  if(sw.available()){
+    uint8_t c = sw.read();
+    checkKey(c);
   }
   if(millis()-lastAutoPlay>5000){
-    isAutoPlay = true;
+    // isAutoPlay = true;
   }
+  renderLED();
   if(isAutoPlay){
     autoPlay();
   }
-  renderLED();
-  //  Serial.print(analogRead(A6));
-  //  Serial.print(":");
-  //  Serial.println(analogRead(A7));
-  //  Serial.print();
-  //  Serial.print(":");
-  //  Serial.println(getUltrasonic(A1));
+}
+void checkKey(uint8_t key){
+  trackIndex = (trackIndex++)%4;
+  for(int i=0;i<7;i++){
+    if(loKey[i]==key){
+      parseNote(trackIndex,lo[i+1],10);
+      return;
+    }
+  }
+  for(int i=0;i<7;i++){
+    if(moKey[i]==key){
+      parseNote(trackIndex,mo[i+1],10);
+      return;
+    }
+  }
+  for(int i=0;i<7;i++){
+    if(hoKey[i]==key){
+      parseNote(trackIndex,ho[i+1],10);
+      return;
+    }
+  }
+  if(key>=funcKey&&key<funcKey+12){
+    instrumentId = key-funcKey;
+  }
+  if(key==funcKey+4){
+    instrumentId = 12;
+  }
+  if(key==numKey){
+    isAutoPlay = true;
+    songIndex = 0;
+    musicIndex = 0;
+  }
+  if(key==numKey+1){
+    isAutoPlay = true;
+    songIndex = 1;
+    musicIndex = 0;
+  }
+  if(key>numKey+1&&key<=numKey+9){
+    speed = (key-numKey)/2.0;
+  }
 }
 float prevT = 0;
 void autoPlay(){
   float ttt = fmaxf(0,pgm_read_byte((songIndex==1?musicTicks2:musicTicks1)+(musicIndex)));
-  // ttt = ttt <10?ttt+60:ttt;
-  if(millis()-musicTime>=ttt*analogRead(A6)/200.0){
+  if(millis()-musicTime>=ttt*speed){
     musicTime = millis();
     if(musicIndex<=musicLength[songIndex]){
-      // prevT = pgm_read_byte((songIndex==1?musicTicks2:musicTicks1)+musicIndex);
       int d = pgm_read_byte((songIndex==1?musicNotes2:musicNotes1)+musicIndex);
       int track = d>>6;
       int note = (d&B111111)+(songIndex==1?25:20);
-      // Serial.print(musicIndex);
-      // Serial.print(":");
-      // Serial.print(ttt);
-      // Serial.print(":");
-      // Serial.print(pgm_read_byte((songIndex==1?musicTicks2:musicTicks1)+musicIndex));
-      // Serial.println();
       parseNote(track%4,note,pgm_read_byte((songIndex==1?musicDuring2:musicDuring1)+musicIndex));
       musicIndex++;
     }else{
@@ -222,10 +233,9 @@ void renderLED(){
   if(millis()-delayTime>20){
     delayTime = millis();
     for(int i=0;i<16;i++){
-        faceA[i] = 0;//index==i?0x0:0xff;
-        faceB[i] = 0;//index==i?0x0:0xff;
+        faceA[i] = 0;
+        faceB[i] = 0;
       }
-      // tt[15] = lastNote;
       if(index==1){
          lastNote += lastNote>3?dir*2.5:(dir/4);
       }
@@ -236,9 +246,8 @@ void renderLED(){
         dir = 1;
       }
       for(int i=0;i<16;i++){
-        // int t = tt[i]*sin((index+i)*24*3.14159/180);
-        faceB[i] = (tt[i]&0xff);//t>=0?(1<<(t)):0;//index==i?0x0:0xff;
-        faceA[i] = ((tt[i]>>7)&0xff);//t<0?1<<(8+t):0;//index==i?0x0:0xff;
+        faceB[i] = (tt[i]&0xff);
+        faceA[i] = ((tt[i]>>7)&0xff);
         
         if(tt[i]>0){
           if(index%2==0){
@@ -254,6 +263,6 @@ void renderLED(){
       }
         
       ledMx1.drawBitmap(0,0,16,faceA);
-      ledMx2.drawBitmap(0,0,16,faceB);
+      // ledMx2.drawBitmap(0,0,16,faceB);
   }
 }
